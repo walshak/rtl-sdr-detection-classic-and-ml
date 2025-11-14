@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>RTL-SDR Analysis Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .chart-container { 
+            height: 400px; 
+            min-height: 300px; 
+            max-height: 500px;
+            position: relative;
+        }
+        .chart-container canvas {
+            max-height: 100% !important;
+        }
+        .stat-card { transition: all 0.3s ease; }
+        .stat-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+        .nav-tab { transition: all 0.2s ease; }
+        .nav-tab.active { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-gray-50 to-gray-100 min-h-screen">
+    <!-- Header -->
+    <div class="bg-white shadow-lg border-b border-gray-200">
+        <div class="container mx-auto px-4 py-4">
+            <div class="flex items-center justify-between">
+                <h1 class="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                    🛰️ RTL-SDR Analysis Dashboard
+                </h1>
+                <div class="flex items-center space-x-4">
+                    <div id="connectionStatus" class="flex items-center space-x-2">
+                        <div class="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+                        <span class="text-sm text-gray-600">Connected</span>
+                    </div>
+                    <button class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors" onclick="refreshAll()">
+                        🔄 Refresh All
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container mx-auto px-4 py-6">
+        <!-- Device Selection -->
+        <div class="bg-white rounded-xl shadow-lg p-6 mb-6" id="deviceSelection">
+            <h2 class="text-xl font-semibold mb-4 flex items-center">
+                <span class="mr-2">📡</span> Select Device
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="deviceGrid">
+                <!-- Devices will be loaded here -->
+            </div>
+        </div>
+        
+        <!-- Main Dashboard -->
+        <div id="dashboard" class="hidden">
+            <!-- Statistics Overview -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6" id="statsOverview">
+                <!-- Stats cards will be loaded here -->
+            </div>
+
+            <!-- Navigation Tabs -->
+            <div class="bg-white rounded-xl shadow-lg mb-6">
+                <div class="flex flex-wrap border-b border-gray-200">
+                    <button class="nav-tab active px-6 py-3 text-sm font-medium text-white rounded-tl-xl" data-tab="overview">📊 Overview</button>
+                    <button class="nav-tab px-6 py-3 text-sm font-medium text-gray-600 hover:text-gray-900" data-tab="spectral">🌊 Spectral Analysis</button>
+                    <button class="nav-tab px-6 py-3 text-sm font-medium text-gray-600 hover:text-gray-900" data-tab="temporal">⏰ Time Analysis</button>
+                    <button class="nav-tab px-6 py-3 text-sm font-medium text-gray-600 hover:text-gray-900" data-tab="quality">✅ Signal Quality</button>
+                    <button class="nav-tab px-6 py-3 text-sm font-medium text-gray-600 hover:text-gray-900" data-tab="advanced">🔬 Advanced</button>
+                    <button class="nav-tab px-6 py-3 text-sm font-medium text-gray-600 hover:text-gray-900" data-tab="raw">📋 Raw Data</button>
+                </div>
+                
+                <!-- Tab Contents -->
+                <div class="p-6">
+                    <!-- Overview Tab -->
+                    <div id="tab-overview" class="tab-content">
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <div class="chart-container">
+                                <h3 class="text-lg font-semibold mb-3">📈 Detection Timeline</h3>
+                                <canvas id="timelineChart"></canvas>
+                            </div>
+                            <div class="chart-container">
+                                <h3 class="text-lg font-semibold mb-3">📊 Frequency Distribution</h3>
+                                <canvas id="frequencyChart"></canvas>
+                            </div>
+                            <div class="chart-container">
+                                <h3 class="text-lg font-semibold mb-3">🎯 Signal Types</h3>
+                                <canvas id="signalTypesChart"></canvas>
+                            </div>
+                            <div class="chart-container">
+                                <h3 class="text-lg font-semibold mb-3">⏰ Activity by Hour</h3>
+                                <canvas id="hourlyChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Spectral Analysis Tab -->
+                    <div id="tab-spectral" class="tab-content hidden">
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <div class="chart-container">
+                                <h3 class="text-lg font-semibold mb-3">🌊 Power Spectrum</h3>
+                                <canvas id="spectrumChart"></canvas>
+                            </div>
+                            <div class="chart-container">
+                                <h3 class="text-lg font-semibold mb-3">🔥 Waterfall Display</h3>
+                                <canvas id="waterfallChart"></canvas>
+                            </div>
+                            <div class="chart-container">
+                                <h3 class="text-lg font-semibold mb-3">📊 Spectral Features</h3>
+                                <canvas id="spectralFeaturesChart"></canvas>
+                            </div>
+                            <div class="chart-container">
+                                <h3 class="text-lg font-semibold mb-3">🎯 Peak Analysis</h3>
+                                <canvas id="peakAnalysisChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Time Analysis Tab -->
+                    <div id="tab-temporal" class="tab-content hidden">
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <div class="chart-container">
+                                <h3 class="text-lg font-semibold mb-3">📈 Signal Strength Timeline</h3>
+                                <canvas id="strengthTimelineChart"></canvas>
+                            </div>
+                            <div class="chart-container">
+                                <h3 class="text-lg font-semibold mb-3">⏱️ Signal Duration</h3>
+                                <canvas id="durationChart"></canvas>
+                            </div>
+                            <div class="chart-container">
+                                <h3 class="text-lg font-semibold mb-3">🌀 Doppler Analysis</h3>
+                                <canvas id="dopplerChart"></canvas>
+                            </div>
+                            <div class="chart-container">
+                                <h3 class="text-lg font-semibold mb-3">📊 Activity Score</h3>
+                                <canvas id="activityChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Signal Quality Tab -->
+                    <div id="tab-quality" class="tab-content hidden">
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <div class="chart-container">
+                                <h3 class="text-lg font-semibold mb-3">✅ Quality Index</h3>
+                                <canvas id="qualityChart"></canvas>
+                            </div>
+                            <div class="chart-container">
+                                <h3 class="text-lg font-semibold mb-3">🎯 Confidence Scores</h3>
+                                <canvas id="confidenceChart"></canvas>
+                            </div>
+                            <div class="chart-container">
+                                <h3 class="text-lg font-semibold mb-3">⚡ Interference Levels</h3>
+                                <canvas id="interferenceChart"></canvas>
+                            </div>
+                            <div class="chart-container">
+                                <h3 class="text-lg font-semibold mb-3">📐 Baseline Deviation</h3>
+                                <canvas id="baselineChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Advanced Tab -->
+                    <div id="tab-advanced" class="tab-content hidden">
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <div class="chart-container">
+                                <h3 class="text-lg font-semibold mb-3">🌊 Modulation Analysis</h3>
+                                <canvas id="modulationChart"></canvas>
+                            </div>
+                            <div class="chart-container">
+                                <h3 class="text-lg font-semibold mb-3">🔄 I/Q Constellation</h3>
+                                <canvas id="constellationChart"></canvas>
+                            </div>
+                            <div class="chart-container">
+                                <h3 class="text-lg font-semibold mb-3">📊 Statistical Analysis</h3>
+                                <canvas id="statisticalChart"></canvas>
+                            </div>
+                            <div class="chart-container">
+                                <h3 class="text-lg font-semibold mb-3">🔬 Correlation Matrix</h3>
+                                <canvas id="correlationChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Raw Data Tab -->
+                    <div id="tab-raw" class="tab-content hidden">
+                        <div class="bg-gray-50 rounded-lg p-4 mb-4">
+                            <div class="flex justify-between items-center mb-3">
+                                <h3 class="text-lg font-semibold">📋 Recent Detections</h3>
+                                <div class="flex space-x-2">
+                                    <input type="text" id="searchInput" placeholder="Search..." class="px-3 py-1 border rounded-md text-sm">
+                                    <select id="filterSelect" class="px-3 py-1 border rounded-md text-sm">
+                                        <option value="">All Types</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="overflow-auto max-h-96 bg-white rounded border">
+                                <table class="min-w-full text-sm">
+                                    <thead class="bg-gray-50 sticky top-0">
+                                        <tr>
+                                            <th class="px-3 py-2 text-left">Time</th>
+                                            <th class="px-3 py-2 text-left">Freq (MHz)</th>
+                                            <th class="px-3 py-2 text-left">Type</th>
+                                            <th class="px-3 py-2 text-left">Peak (dB)</th>
+                                            <th class="px-3 py-2 text-left">SNR (dB)</th>
+                                            <th class="px-3 py-2 text-left">Quality</th>
+                                            <th class="px-3 py-2 text-left">Confidence</th>
+                                            <th class="px-3 py-2 text-left">Duration (s)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="detectionTable"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+    // Global variables
+    let charts = {};
+    let selectedDevice = null;
+    let activeTab = 'overview';
+    let refreshInterval = null;
+    
+    // Chart color schemes
+    const colorSchemes = {
+        primary: ['#3B82F6', '#8B5CF6', '#10B981', '#F59E0B', '#EF4444'],
+        spectral: ['#1E3A8A', '#3B82F6', '#06B6D4', '#10B981', '#84CC16'],
+        quality: ['#22C55E', '#F59E0B', '#EF4444', '#8B5CF6', '#6B7280'],
+        gradient: [
+            'rgba(59, 130, 246, 0.8)',
+            'rgba(139, 92, 246, 0.8)',
+            'rgba(16, 185, 129, 0.8)',
+            'rgba(245, 158, 11, 0.8)',
+            'rgba(239, 68, 68, 0.8)'
+        ]
+    };
+
+    // Utility functions
+    function safeFixed(value, decimals = 2) {
+        if (value === undefined || value === null || isNaN(value)) return 'N/A';
+        return Number(value).toFixed(decimals);
+    }
+    
+    function safeFreq(freq) {
+        if (freq === undefined || freq === null || isNaN(freq)) return 'N/A';
+        return (freq / 1e6).toFixed(3);
+    }
+    
+    function formatTimestamp(timestamp) {
+        return new Date(timestamp).toLocaleString();
+    }
+    
+    function createChart(canvasId, config) {
+        const ctx = document.getElementById(canvasId);
+        if (!ctx) return null;
+        
+        // Destroy existing chart
+        if (charts[canvasId]) {
+            charts[canvasId].destroy();
+        }
+        
+        // Set canvas dimensions to prevent stretching
+        const container = ctx.parentElement;
+        if (container) {
+            ctx.style.maxHeight = '400px';
+            ctx.style.height = '100%';
+        }
+        
+        // Create new chart
+        charts[canvasId] = new Chart(ctx, {
+            ...config,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: { duration: 300 },
+                layout: {
+                    padding: 10
+                },
+                ...config.options
+            }
+        });
+        
+        return charts[canvasId];
+    }
+    // Device management
+    function loadDevices() {
+        $.get('/devices', function(devices) {
+            const deviceGrid = $('#deviceGrid');
+            deviceGrid.empty();
+            
+            if (devices.length === 0) {
+                deviceGrid.html('<div class="col-span-full text-center text-gray-500 py-8">No devices found. Make sure the listener is running.</div>');
+                return;
+            }
+            
+            devices.forEach(dev => {
+                const deviceCard = $(`
+                    <div class="stat-card bg-gradient-to-r from-blue-50 to-purple-50 border border-gray-200 rounded-lg p-4 cursor-pointer hover:shadow-lg">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <h3 class="font-semibold text-lg">${dev.device_label}</h3>
+                                <p class="text-sm text-gray-600">📍 ${dev.device_lat.toFixed(4)}, ${dev.device_long.toFixed(4)}</p>
+                            </div>
+                            <div class="text-2xl">📡</div>
+                        </div>
+                        <button class="mt-3 w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors">
+                            Select Device
+                        </button>
+                    </div>
+                `);
+                
+                deviceCard.find('button').click(() => selectDevice(dev.device_label));
+                deviceGrid.append(deviceCard);
+            });
+        }).fail(() => {
+            $('#deviceGrid').html('<div class="col-span-full text-center text-red-500 py-8">Failed to load devices. Check API connection.</div>');
+        });
+    }
+    
+    function selectDevice(deviceLabel) {
+        selectedDevice = deviceLabel;
+        $('#deviceSelection').slideUp();
+        $('#dashboard').removeClass('hidden').hide().slideDown();
+        loadStatistics();
+        loadAllCharts();
+        
+        // Set up auto-refresh
+        if (refreshInterval) clearInterval(refreshInterval);
+        refreshInterval = setInterval(() => {
+            if (selectedDevice) {
+                loadStatistics();
+                loadChartsForActiveTab();
+            }
+        }, 30000); // Refresh every 30 seconds
+    }
+    
+    // Statistics loading
+    function loadStatistics() {
+        $.get('/statistics', function(stats) {
+            const statsHtml = `
+                <div class="stat-card bg-white rounded-xl shadow-lg p-6 text-center">
+                    <div class="text-3xl font-bold text-blue-600">${stats.summary.total_detections.toLocaleString()}</div>
+                    <div class="text-sm text-gray-600 mt-1">Total Detections</div>
+                </div>
+                <div class="stat-card bg-white rounded-xl shadow-lg p-6 text-center">
+                    <div class="text-3xl font-bold text-green-600">${stats.summary.recent_24h.toLocaleString()}</div>
+                    <div class="text-sm text-gray-600 mt-1">Last 24 Hours</div>
+                </div>
+                <div class="stat-card bg-white rounded-xl shadow-lg p-6 text-center">
+                    <div class="text-3xl font-bold text-purple-600">${stats.summary.signal_types}</div>
+                    <div class="text-sm text-gray-600 mt-1">Signal Types</div>
+                </div>
+                <div class="stat-card bg-white rounded-xl shadow-lg p-6 text-center">
+                    <div class="text-3xl font-bold text-orange-600">${safeFixed(stats.summary.avg_quality, 0)}%</div>
+                    <div class="text-sm text-gray-600 mt-1">Avg Quality</div>
+                </div>
+            `;
+            $('#statsOverview').html(statsHtml);
+        });
+    }
+    
+    // Chart loading functions
+    function loadAllCharts() {
+        loadChartsForActiveTab();
+    }
+    
+    function loadChartsForActiveTab() {
+        switch(activeTab) {
+            case 'overview':
+                loadOverviewCharts();
+                break;
+            case 'spectral':
+                loadSpectralCharts();
+                break;
+            case 'temporal':
+                loadTemporalCharts();
+                break;
+            case 'quality':
+                loadQualityCharts();
+                break;
+            case 'advanced':
+                loadAdvancedCharts();
+                break;
+            case 'raw':
+                loadRawData();
+                break;
+        }
+    }
+    
+    function loadOverviewCharts() {
+        // Timeline Chart
+        $.get('/chart_data/time_series', {device_label: selectedDevice, page_size: 100}, function(data) {
+            if (!data.results.length) return;
+            
+            createChart('timelineChart', {
+                type: 'line',
+                data: {
+                    labels: data.results.map(d => new Date(d.timestamp)),
+                    datasets: [{
+                        label: 'Peak Power (dB)',
+                        data: data.results.map(d => d.peak_power),
+                        borderColor: colorSchemes.primary[0],
+                        backgroundColor: colorSchemes.gradient[0],
+                        fill: false
+                    }, {
+                        label: 'SNR (dB)',
+                        data: data.results.map(d => d.snr),
+                        borderColor: colorSchemes.primary[1],
+                        backgroundColor: colorSchemes.gradient[1],
+                        fill: false
+                    }]
+                },
+                options: {
+                    scales: {
+                        x: { type: 'time', title: { display: true, text: 'Time' }},
+                        y: { title: { display: true, text: 'Power (dB)' }}
+                    }
+                }
+            });
+        });
+        
+        // Frequency Distribution
+        $.get('/chart_data/frequency_analysis', {device_label: selectedDevice, page_size: 200}, function(data) {
+            const freqGroups = {};
+            data.results.forEach(d => {
+                const freqBand = Math.floor(d.freq / 10) * 10; // Group by 10 MHz
+                freqGroups[freqBand] = (freqGroups[freqBand] || 0) + 1;
+            });
+            
+            createChart('frequencyChart', {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(freqGroups).map(f => `${f} MHz`),
+                    datasets: [{
+                        label: 'Detection Count',
+                        data: Object.values(freqGroups),
+                        backgroundColor: colorSchemes.gradient[0]
+                    }]
+                },
+                options: {
+                    scales: {
+                        y: { title: { display: true, text: 'Count' }}
+                    }
+                }
+            });
+        });
+        
+        // Signal Types Pie Chart
+        $.get('/statistics', function(stats) {
+            createChart('signalTypesChart', {
+                type: 'doughnut',
+                data: {
+                    labels: stats.frequency_distribution.map(d => d.label),
+                    datasets: [{
+                        data: stats.frequency_distribution.map(d => d.count),
+                        backgroundColor: colorSchemes.primary
+                    }]
+                }
+            });
+            
+            // Hourly Activity
+            createChart('hourlyChart', {
+                type: 'bar',
+                data: {
+                    labels: stats.hourly_activity.map(d => `${d.hour}:00`),
+                    datasets: [{
+                        label: 'Detections',
+                        data: stats.hourly_activity.map(d => d.count),
+                        backgroundColor: colorSchemes.gradient[2]
+                    }]
+                },
+                options: {
+                    scales: {
+                        y: { title: { display: true, text: 'Count' }}
+                    }
+                }
+            });
+        });
+    }
+    
+    function loadSpectralCharts() {
+        // Power Spectrum
+        $.get('/chart_data/spectrum', {device_label: selectedDevice, page_size: 5}, function(data) {
+            if (!data.results.length) return;
+            
+            const datasets = data.results.map((d, idx) => ({
+                label: `${d.label} @ ${safeFreq(d.freq)} MHz`,
+                data: d.power_spectrum || [],
+                borderColor: colorSchemes.spectral[idx % colorSchemes.spectral.length],
+                fill: false,
+                pointRadius: 0
+            }));
+            
+            createChart('spectrumChart', {
+                type: 'line',
+                data: { datasets },
+                options: {
+                    scales: {
+                        x: { title: { display: true, text: 'Frequency Bin' }},
+                        y: { title: { display: true, text: 'Power (dB)' }}
+                    }
+                }
+            });
+        });
+        
+        // Waterfall Chart
+        $.get('/chart_data/waterfall', {device_label: selectedDevice, page_size: 3}, function(data) {
+            if (!data.results.length || !data.results[0].waterfall) return;
+            
+            const waterfallData = data.results[0].waterfall;
+            const heatmapData = [];
+            
+            waterfallData.forEach((timeSlice, t) => {
+                timeSlice.forEach((power, f) => {
+                    if (f % 8 === 0) { // Downsample for performance
+                        heatmapData.push({x: f, y: t, v: power});
+                    }
+                });
+            });
+            
+            createChart('waterfallChart', {
+                type: 'scatter',
+                data: {
+                    datasets: [{
+                        label: 'Waterfall',
+                        data: heatmapData,
+                        backgroundColor: function(context) {
+                            const value = context.parsed?.v || -80;
+                            const normalized = Math.max(0, Math.min(1, (value + 100) / 50));
+                            return `hsl(${240 - normalized * 240}, 70%, ${50 + normalized * 30}%)`;
+                        },
+                        pointRadius: 3
+                    }]
+                },
+                options: {
+                    scales: {
+                        x: { title: { display: true, text: 'Frequency Bin' }},
+                        y: { title: { display: true, text: 'Time Slice' }}
+                    }
+                }
+            });
+        });
+        
+        // Spectral Features (requires advanced_spectral endpoint)
+        $.get('/chart_data/advanced_spectral', {device_label: selectedDevice, page_size: 50}, function(data) {
+            if (!data.results.length) return;
+            
+            createChart('spectralFeaturesChart', {
+                type: 'scatter',
+                data: {
+                    datasets: [{
+                        label: 'Spectral Centroid vs Rolloff',
+                        data: data.results.map(d => ({
+                            x: d.spectral_centroid,
+                            y: d.spectral_rolloff,
+                            label: d.label
+                        })),
+                        backgroundColor: colorSchemes.primary[0]
+                    }]
+                },
+                options: {
+                    scales: {
+                        x: { title: { display: true, text: 'Spectral Centroid (Hz)' }},
+                        y: { title: { display: true, text: 'Spectral Rolloff (Hz)' }}
+                    }
+                }
+            });
+        });
+    }
+    
+    function loadTemporalCharts() {
+        // Signal Strength Timeline
+        $.get('/chart_data/time_series', {device_label: selectedDevice, page_size: 100}, function(data) {
+            if (!data.results.length) return;
+            
+            createChart('strengthTimelineChart', {
+                type: 'line',
+                data: {
+                    labels: data.results.map(d => new Date(d.timestamp)),
+                    datasets: [{
+                        label: 'Activity Score',
+                        data: data.results.map(d => d.activity_score),
+                        borderColor: colorSchemes.primary[0],
+                        fill: true,
+                        backgroundColor: colorSchemes.gradient[0]
+                    }]
+                },
+                options: {
+                    scales: {
+                        x: { type: 'time', title: { display: true, text: 'Time' }},
+                        y: { title: { display: true, text: 'Activity Score' }}
+                    }
+                }
+            });
+        });
+        
+        // Performance Metrics
+        $.get('/chart_data/performance_metrics', {device_label: selectedDevice, page_size: 100}, function(data) {
+            if (!data.results.length) return;
+            
+            createChart('durationChart', {
+                type: 'bar',
+                data: {
+                    labels: data.results.map(d => new Date(d.timestamp).toLocaleTimeString()),
+                    datasets: [{
+                        label: 'Signal Duration (s)',
+                        data: data.results.map(d => d.signal_duration),
+                        backgroundColor: colorSchemes.gradient[1]
+                    }]
+                },
+                options: {
+                    scales: {
+                        y: { title: { display: true, text: 'Duration (seconds)' }}
+                    }
+                }
+            });
+            
+            createChart('dopplerChart', {
+                type: 'line',
+                data: {
+                    labels: data.results.map(d => new Date(d.timestamp)),
+                    datasets: [{
+                        label: 'Doppler Shift',
+                        data: data.results.map(d => d.doppler_shift),
+                        borderColor: colorSchemes.primary[2],
+                        fill: false
+                    }]
+                },
+                options: {
+                    scales: {
+                        x: { type: 'time', title: { display: true, text: 'Time' }},
+                        y: { title: { display: true, text: 'Doppler Shift (Hz)' }}
+                    }
+                }
+            });
+        });
+    }
+    
+    function loadQualityCharts() {
+        $.get('/chart_data/signal_quality', {device_label: selectedDevice, page_size: 100}, function(data) {
+            if (!data.results.length) return;
+            
+            // Quality Index
+            createChart('qualityChart', {
+                type: 'line',
+                data: {
+                    labels: data.results.map(d => new Date(d.timestamp)),
+                    datasets: [{
+                        label: 'Signal Quality Index',
+                        data: data.results.map(d => d.signal_quality_index),
+                        borderColor: colorSchemes.quality[0],
+                        backgroundColor: colorSchemes.gradient[0],
+                        fill: true
+                    }]
+                },
+                options: {
+                    scales: {
+                        x: { type: 'time', title: { display: true, text: 'Time' }},
+                        y: { title: { display: true, text: 'Quality Index (0-100)' }, min: 0, max: 100 }
+                    }
+                }
+            });
+            
+            // Confidence Scores
+            createChart('confidenceChart', {
+                type: 'scatter',
+                data: {
+                    datasets: [{
+                        label: 'Confidence vs Quality',
+                        data: data.results.map(d => ({
+                            x: d.confidence_score,
+                            y: d.signal_quality_index,
+                            label: d.label
+                        })),
+                        backgroundColor: colorSchemes.quality[1]
+                    }]
+                },
+                options: {
+                    scales: {
+                        x: { title: { display: true, text: 'Confidence Score' }},
+                        y: { title: { display: true, text: 'Quality Index' }}
+                    }
+                }
+            });
+            
+            // Interference Levels
+            createChart('interferenceChart', {
+                type: 'bar',
+                data: {
+                    labels: data.results.map(d => d.label).slice(0, 20),
+                    datasets: [{
+                        label: 'Interference Level',
+                        data: data.results.map(d => d.interference_level).slice(0, 20),
+                        backgroundColor: colorSchemes.gradient[2]
+                    }]
+                },
+                options: {
+                    scales: {
+                        y: { title: { display: true, text: 'Interference Level' }}
+                    }
+                }
+            });
+            
+            // Baseline Deviation
+            createChart('baselineChart', {
+                type: 'line',
+                data: {
+                    labels: data.results.map(d => new Date(d.timestamp)),
+                    datasets: [{
+                        label: 'Baseline Deviation',
+                        data: data.results.map(d => d.baseline_deviation),
+                        borderColor: colorSchemes.quality[3],
+                        fill: false
+                    }]
+                },
+                options: {
+                    scales: {
+                        x: { type: 'time', title: { display: true, text: 'Time' }},
+                        y: { title: { display: true, text: 'Deviation' }}
+                    }
+                }
+            });
+        });
+    }
+    
+    function loadAdvancedCharts() {
+        // Modulation Analysis
+        $.get('/chart_data/modulation_analysis', {device_label: selectedDevice, page_size: 50}, function(data) {
+            if (!data.results.length) return;
+            
+            createChart('modulationChart', {
+                type: 'radar',
+                data: {
+                    labels: ['Modulation Index', 'Phase Variance', 'Amplitude Variance', 'Zero Crossing Rate'],
+                    datasets: data.results.slice(0, 3).map((d, idx) => ({
+                        label: d.label,
+                        data: [
+                            d.modulation_index * 100,
+                            d.phase_variance * 10,
+                            d.amplitude_variance * 10,
+                            d.zero_crossing_rate * 1000
+                        ],
+                        borderColor: colorSchemes.primary[idx],
+                        backgroundColor: colorSchemes.gradient[idx]
+                    }))
+                }
+            });
+        });
+        
+        // I/Q Constellation (requires constellation data)
+        $.get('/chart_data/constellation', {device_label: selectedDevice, page_size: 5}, function(data) {
+            if (!data.results.length || !data.results[0].i) return;
+            
+            const constellationData = data.results[0].i.slice(0, 1000).map((i, idx) => ({
+                x: i,
+                y: data.results[0].q[idx]
+            }));
+            
+            createChart('constellationChart', {
+                type: 'scatter',
+                data: {
+                    datasets: [{
+                        label: 'I/Q Constellation',
+                        data: constellationData,
+                        backgroundColor: colorSchemes.primary[0],
+                        pointRadius: 1
+                    }]
+                },
+                options: {
+                    scales: {
+                        x: { title: { display: true, text: 'In-Phase' }},
+                        y: { title: { display: true, text: 'Quadrature' }}
+                    }
+                }
+            });
+        });
+        
+        // Statistical Analysis
+        $.get('/chart_data/features', {device_label: selectedDevice, page_size: 50}, function(data) {
+            if (!data.results.length) return;
+            
+            createChart('statisticalChart', {
+                type: 'scatter',
+                data: {
+                    datasets: [{
+                        label: 'Kurtosis vs Skewness',
+                        data: data.results.map(d => ({
+                            x: d.kurtosis,
+                            y: d.skewness,
+                            label: d.label
+                        })),
+                        backgroundColor: colorSchemes.primary[1]
+                    }]
+                },
+                options: {
+                    scales: {
+                        x: { title: { display: true, text: 'Kurtosis' }},
+                        y: { title: { display: true, text: 'Skewness' }}
+                    }
+                }
+            });
+        });
+    }
+    
+    function loadRawData() {
+        $.get('/detections', {device_label: selectedDevice, page_size: 100, sort: 'timestamp', order: 'desc'}, function(data) {
+            updateDetectionTable(data.results);
+            
+            // Update filter options
+            const uniqueLabels = [...new Set(data.results.map(d => d.label))];
+            const filterSelect = $('#filterSelect');
+            filterSelect.empty().append('<option value="">All Types</option>');
+            uniqueLabels.forEach(label => {
+                filterSelect.append(`<option value="${label}">${label}</option>`);
+            });
+        });
+    }
+    
+    function updateDetectionTable(detections) {
+        const tbody = $('#detectionTable');
+        tbody.empty();
+        
+        detections.slice(0, 100).forEach(d => {
+            const time = new Date(d.timestamp).toLocaleTimeString();
+            const freq = safeFreq(d.freq);
+            const peakPower = safeFixed(d.peak_power, 1);
+            const snr = safeFixed(d.snr, 1);
+            const quality = safeFixed(d.signal_quality_index || (d.snr ? Math.min(100, Math.max(0, d.snr * 2)) : 0), 0);
+            const confidence = safeFixed(d.confidence_score, 0);
+            const duration = safeFixed(d.signal_duration, 1);
+            
+            const qualityColor = quality > 70 ? 'text-green-600' : quality > 40 ? 'text-yellow-600' : 'text-red-600';
+            
+            const row = `
+                <tr class="hover:bg-gray-50 border-b text-xs">
+                    <td class="px-3 py-2">${time}</td>
+                    <td class="px-3 py-2 font-mono">${freq}</td>
+                    <td class="px-3 py-2">
+                        <span class="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">${d.label || 'Unknown'}</span>
+                    </td>
+                    <td class="px-3 py-2 font-mono">${peakPower}</td>
+                    <td class="px-3 py-2 font-mono">${snr}</td>
+                    <td class="px-3 py-2 font-mono ${qualityColor}">${quality}%</td>
+                    <td class="px-3 py-2 font-mono">${confidence}%</td>
+                    <td class="px-3 py-2 font-mono">${duration}</td>
+                </tr>
+            `;
+            tbody.append(row);
+        });
+    }
+    
+    // Tab management
+    function switchTab(tabName) {
+        // Update active tab
+        $('.nav-tab').removeClass('active').addClass('text-gray-600').removeClass('text-white');
+        $(`.nav-tab[data-tab="${tabName}"]`).addClass('active').removeClass('text-gray-600').addClass('text-white');
+        
+        // Hide all tab contents
+        $('.tab-content').addClass('hidden');
+        $(`#tab-${tabName}`).removeClass('hidden');
+        
+        activeTab = tabName;
+        loadChartsForActiveTab();
+    }
+    
+    // Global functions
+    function refreshAll() {
+        if (selectedDevice) {
+            loadStatistics();
+            loadChartsForActiveTab();
+        }
+    }
+    
+    function resetDashboard() {
+        selectedDevice = null;
+        if (refreshInterval) {
+            clearInterval(refreshInterval);
+            refreshInterval = null;
+        }
+        $('#dashboard').slideUp();
+        $('#deviceSelection').slideDown();
+        
+        // Destroy all charts
+        Object.values(charts).forEach(chart => chart.destroy());
+        charts = {};
+    }
+    
+    // Make functions globally accessible
+    window.selectDevice = selectDevice;
+    window.refreshAll = refreshAll;
+    window.resetDashboard = resetDashboard;
+    
+    // Event handlers and initialization
+    $(document).ready(function() {
+        // Load devices on startup
+        loadDevices();
+        
+        // Tab switching
+        $('.nav-tab').click(function() {
+            const tabName = $(this).data('tab');
+            switchTab(tabName);
+        });
+        
+        // Search and filter functionality
+        $('#searchInput').on('input', function() {
+            const searchTerm = $(this).val().toLowerCase();
+            $('#detectionTable tr').each(function() {
+                const text = $(this).text().toLowerCase();
+                $(this).toggle(text.includes(searchTerm));
+            });
+        });
+        
+        $('#filterSelect').change(function() {
+            const filterValue = $(this).val();
+            $('#detectionTable tr').each(function() {
+                if (!filterValue) {
+                    $(this).show();
+                } else {
+                    const signalType = $(this).find('td:nth-child(3)').text().trim();
+                    $(this).toggle(signalType.includes(filterValue));
+                }
+            });
+        });
+        
+        // Keyboard shortcuts
+        $(document).keydown(function(e) {
+            if (e.ctrlKey || e.metaKey) {
+                switch(e.keyCode) {
+                    case 82: // Ctrl+R - Refresh
+                        e.preventDefault();
+                        refreshAll();
+                        break;
+                    case 72: // Ctrl+H - Home
+                        e.preventDefault();
+                        resetDashboard();
+                        break;
+                }
+            }
+            
+            // Tab switching with numbers
+            if (e.keyCode >= 49 && e.keyCode <= 54) { // 1-6
+                const tabs = ['overview', 'spectral', 'temporal', 'quality', 'advanced', 'raw'];
+                const tabIndex = e.keyCode - 49;
+                if (tabs[tabIndex] && selectedDevice) {
+                    switchTab(tabs[tabIndex]);
+                }
+            }
+        });
+        
+        // Resize handler for responsive charts
+        let resizeTimeout;
+        $(window).resize(function() {
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(function() {
+                Object.values(charts).forEach(chart => {
+                    if (chart) {
+                        // Force canvas to maintain proper dimensions
+                        const canvas = chart.canvas;
+                        if (canvas) {
+                            canvas.style.maxHeight = '400px';
+                        }
+                        chart.resize();
+                    }
+                });
+            }, 100);
+        });
+        
+        // Auto-refresh indicator
+        setInterval(function() {
+            if (selectedDevice && refreshInterval) {
+                $('#connectionStatus').find('.animate-pulse').addClass('animate-bounce').removeClass('animate-pulse');
+                setTimeout(() => {
+                    $('#connectionStatus').find('.animate-bounce').addClass('animate-pulse').removeClass('animate-bounce');
+                }, 1000);
+            }
+        }, 30000);
+        
+        console.log('RTL-SDR Dashboard initialized');
+        console.log('Keyboard shortcuts:');
+        console.log('  Ctrl+R: Refresh all data');
+        console.log('  Ctrl+H: Return to device selection');
+        console.log('  1-6: Switch between tabs');
+    });
+    </script>
+</body>
+</html>

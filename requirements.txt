@@ -1,0 +1,7 @@
+pyrtlsdr
+numpy
+matplotlib
+scipy
+flask
+scikit-learn
+tensorflow-gpu
