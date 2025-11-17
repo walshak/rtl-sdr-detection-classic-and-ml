@@ -234,14 +234,31 @@ def fetch_detections(params):
     query += f" ORDER BY {sort} {order}"
     # Pagination
     page = int(params.get('page', 1))
+    
+    # Support 'limit' parameter (alias for page_size)
+    if 'limit' in params:
+        page_size = min(int(params['limit']), 1000)  # Max 1000 items per page
+    elif 'page_size' in params:
+        page_size = int(params['page_size'])
+    else:
+        # Default page_size based on chart type
+        chart_type = params.get('chart', 'spectrum')
+        if chart_type in ['spectrum', 'histogram']:
+            page_size = 5
+        elif chart_type in ['scatter', 'timeline', 'signal_strength', 'frequency_distribution', 'signal_quality']:
+            page_size = 50
+        else:
+            page_size = 20
+    
     # Limit page_size for performance
     chart_type = params.get('chart', 'spectrum')
     if chart_type in ['spectrum', 'histogram']:
-        page_size = min(int(params.get('page_size', 5)), 10)  # Increase to 5-10 for heavy charts
+        page_size = min(page_size, 10)
     elif chart_type in ['scatter', 'timeline', 'signal_strength', 'frequency_distribution', 'signal_quality']:
-        page_size = min(int(params.get('page_size', 50)), 200)  # More data for aggregate charts
+        page_size = min(page_size, 200)
     else:
-        page_size = min(int(params.get('page_size', 20)), 100)
+        page_size = min(page_size, 100)
+    
     offset = (page - 1) * page_size
     query += " LIMIT ? OFFSET ?"
     args.extend([page_size, offset])
@@ -269,12 +286,12 @@ def fetch_detections(params):
             det['waterfall_data'] = []
         detections.append(det)
     conn.close()
-    return detections, total_count
+    return detections, total_count, page, page_size
 
 @app.route('/detections', methods=['GET'])
 def get_detections():
     params = request.args.to_dict()
-    detections, total = fetch_detections(params)
+    detections, total, page, limit = fetch_detections(params)
     # Format for charting: group by chart type
     chart_type = params.get('chart', 'spectrum')
     if chart_type == 'spectrum':
@@ -519,7 +536,9 @@ def get_detections():
     return jsonify({
         'results': data,
         'count': len(data),
-        'total': total
+        'total': total,
+        'page': page,
+        'limit': limit
     })
 
 @app.route('/detections/<int:det_id>', methods=['DELETE'])
@@ -597,7 +616,7 @@ def get_chart_data(chart_type):
     }
     
     params['page_size'] = chart_page_sizes.get(chart_type, 50)
-    detections, total = fetch_detections(params)
+    detections, total, page, limit = fetch_detections(params)
     
     # Process data based on chart type
     if chart_type in ['time_series', 'frequency_analysis', 'signal_quality', 'advanced_spectral', 'modulation_analysis', 'performance_metrics', 'constellation', 'peaks', 'spectrum', 'waterfall', 'histogram', 'scatter', 'timeline', 'signal_strength', 'frequency_distribution']:
@@ -605,7 +624,7 @@ def get_chart_data(chart_type):
     else:
         # Use existing processing with proper serialization
         params['chart'] = chart_type
-        raw_data, total = fetch_detections(params)
+        raw_data, total, page, limit = fetch_detections(params)
         # Convert any bytes objects to serializable format
         data = []
         for item in raw_data:
@@ -622,6 +641,8 @@ def get_chart_data(chart_type):
         'results': data,
         'count': len(data),
         'total': total,
+        'page': page,
+        'limit': limit,
         'chart_type': chart_type
     })
 
