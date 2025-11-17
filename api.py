@@ -12,6 +12,13 @@ if not os.path.exists(DATA_DIR):
     os.makedirs(DATA_DIR)
 DB_PATH = os.getenv('DB_PATH', os.path.join(DATA_DIR, 'detections.db'))
 
+# Initialize database with WAL mode for concurrent access
+def get_db_connection():
+    conn = sqlite3.connect(DB_PATH, timeout=30.0)
+    conn.execute('PRAGMA journal_mode=WAL')
+    conn.execute('PRAGMA busy_timeout=30000')
+    return conn
+
 # Chart data processing functions
 def process_chart_data(detections, chart_type):
     """Process detections data for specific chart types."""
@@ -156,7 +163,7 @@ def decode_power_spectrum(power_spectrum_blob):
 
 # Helper: fetch unique devices
 def fetch_devices():
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db_connection()
     c = conn.cursor()
     c.execute("SELECT DISTINCT device_label, device_lat, device_long FROM detections")
     devices = [
@@ -172,7 +179,7 @@ def get_devices():
 
 # Helper: fetch unique signal labels
 def fetch_signal_labels():
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db_connection()
     c = conn.cursor()
     c.execute("SELECT DISTINCT label, COUNT(*) as count FROM detections GROUP BY label ORDER BY count DESC")
     labels = [
@@ -189,7 +196,7 @@ def get_signal_labels():
 
 # Helper: fetch detections with search, sort, filter, pagination
 def fetch_detections(params):
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db_connection()
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
     # Build query
@@ -543,7 +550,7 @@ def get_detections():
 
 @app.route('/detections/<int:det_id>', methods=['DELETE'])
 def delete_detection(det_id):
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db_connection()
     c = conn.cursor()
     c.execute('DELETE FROM detections WHERE id = ?', (det_id,))
     conn.commit()
@@ -553,7 +560,7 @@ def delete_detection(det_id):
 @app.route('/statistics', methods=['GET'])
 def get_statistics():
     """Get comprehensive statistics for dashboard."""
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db_connection()
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
     
@@ -659,7 +666,7 @@ def health_check():
     """Health check endpoint for container monitoring."""
     try:
         # Check database connectivity
-        conn = sqlite3.connect(DB_PATH)
+        conn = get_db_connection()
         conn.execute("SELECT 1")
         conn.close()
         

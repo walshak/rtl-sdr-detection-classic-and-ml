@@ -10,7 +10,9 @@ def init_ml_db():
         os.makedirs(data_dir)
     
     db_path = os.path.join(data_dir, 'detections_ml.db')
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(db_path, timeout=30.0)
+    conn.execute('PRAGMA journal_mode=WAL')
+    conn.execute('PRAGMA busy_timeout=30000')
     c = conn.cursor()
     c.execute('''
         CREATE TABLE IF NOT EXISTS detections_ml (

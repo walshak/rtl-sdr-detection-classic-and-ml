@@ -159,7 +159,9 @@ def listen_and_flag():
     if not os.path.exists(data_dir):
         os.makedirs(data_dir)
     db_path = os.path.join(data_dir, 'detections_ml.db')
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(db_path, timeout=30.0, check_same_thread=False)
+    conn.execute('PRAGMA journal_mode=WAL')
+    conn.execute('PRAGMA busy_timeout=30000')
     
     fft_history = {}
     max_history = 32

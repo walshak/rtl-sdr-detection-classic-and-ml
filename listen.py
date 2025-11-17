@@ -380,7 +380,9 @@ def listen_and_flag():
             os.makedirs(data_dir)
         db_path = os.getenv('DB_PATH', os.path.join(data_dir, 'detections.db'))
     
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(db_path, timeout=30.0, check_same_thread=False)
+    conn.execute('PRAGMA journal_mode=WAL')
+    conn.execute('PRAGMA busy_timeout=30000')
     print(f"📁 Database: {db_path}")
     
     # For waterfall: keep a rolling buffer of FFTs per frequency
