@@ -32,6 +32,7 @@ Write-Host "[2/5] Copying essential files..." -ForegroundColor Yellow
 $files = @(
     "START-RTLSDR.bat",
     "STOP-RTLSDR.bat",
+    "run-baseline-scan.bat",
     "migrate-databases.bat",
     "docker-compose.yml",
     "Dockerfile",

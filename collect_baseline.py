@@ -4,6 +4,8 @@ from rtlsdr import RtlSdr
 import time
 import datetime
 import os
+import sys
+import signal
 
 # Example frequencies and types
 FREQUENCIES = [
@@ -66,14 +68,77 @@ def collect_samples(freq, label):
 
 def main():
     baseline = []
-    for freq, label in FREQUENCIES:
-        print(f"Collecting {label} at {freq/1e6:.3f} MHz...")
-        props = collect_samples(freq, label)
-        baseline.append(props)
-        time.sleep(1)
-    with open("baseline.json", "w") as f:
-        json.dump(baseline, f, indent=2)
-    print("Baseline collection complete. Saved to baseline.json.")
+    baseline_file = "baseline.json"
+    interrupted = False
+    
+    def signal_handler(sig, frame):
+        """Handle Ctrl+C gracefully"""
+        nonlocal interrupted
+        interrupted = True
+    
+    signal.signal(signal.SIGINT, signal_handler)
+    
+    # Load existing baseline if it exists
+    if os.path.exists(baseline_file):
+        try:
+            with open(baseline_file, "r") as f:
+                baseline = json.load(f)
+            print(f"Loaded {len(baseline)} existing baseline entries")
+        except:
+            print("Starting fresh baseline collection")
+    
+    total_freqs = len(FREQUENCIES)
+    print(f"\nBaseline Collection - {total_freqs} frequencies")
+    print("=" * 50)
+    print("Press Ctrl+C at any time to stop and save current progress")
+    print("=" * 50)
+    print()
+    
+    def save_baseline():
+        """Save current baseline to file"""
+        with open(baseline_file, "w") as f:
+            json.dump(baseline, f, indent=2)
+        print(f"\n✓ Saved {len(baseline)} entries to {baseline_file}")
+    
+    try:
+        for i, (freq, label) in enumerate(FREQUENCIES, 1):
+            # Check for interrupt
+            if interrupted:
+                print(f"\n\n⏭️  Stopped by user at {i}/{total_freqs}")
+                save_baseline()
+                return
+            
+            print(f"[{i}/{total_freqs}] Collecting {label} at {freq/1e6:.3f} MHz...", end=" ", flush=True)
+            
+            try:
+                props = collect_samples(freq, label)
+                baseline.append(props)
+                print("✓")
+                
+                # Auto-save every 10 items
+                if len(baseline) % 10 == 0:
+                    save_baseline()
+                
+            except Exception as e:
+                print(f"✗ Error: {e}")
+                continue
+            
+            # Short delay between samples
+            time.sleep(0.5)
+        
+        # Final save
+        save_baseline()
+        print("\n" + "=" * 50)
+        print("Baseline collection complete!")
+        print("=" * 50)
+        
+    except KeyboardInterrupt:
+        print(f"\n\n⚠️  Interrupted by user at {len(baseline)}/{total_freqs}")
+        save_baseline()
+    except Exception as e:
+        print(f"\n\n❌ Error during collection: {e}")
+        if baseline:
+            save_baseline()
 
 if __name__ == "__main__":
     main()

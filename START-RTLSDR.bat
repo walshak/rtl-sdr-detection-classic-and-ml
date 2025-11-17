@@ -208,6 +208,45 @@ if not exist "backups" mkdir backups
 echo [OK] Directories ready
 
 echo.
+echo ==========================================
+echo OPTIONAL: Baseline Scan
+echo ==========================================
+echo.
+echo Would you like to run a baseline scan now?
+echo This will scan all configured frequencies to establish
+echo a baseline for signal detection. You can skip anytime
+echo by pressing Ctrl+C during the scan.
+echo.
+echo Current baseline: 
+if exist "baseline.json" (
+    echo   baseline.json exists ^(will be updated^)
+) else (
+    echo   No baseline.json found ^(will be created^)
+)
+echo.
+choice /C YN /N /M "Run baseline scan now? (Y/N): "
+if errorlevel 2 goto skip_baseline
+if errorlevel 1 (
+    echo.
+    echo Starting baseline scan in Docker container...
+    echo ==========================================
+    echo.
+    
+    REM Build the image first
+    docker-compose build rtl-sdr-listener >nul 2>&1
+    
+    REM Run baseline scan in a temporary container (not the main listener)
+    docker-compose run --rm rtl-sdr-listener python collect_baseline.py
+    
+    echo.
+    echo ==========================================
+    echo Baseline scan completed
+    echo ==========================================
+    timeout /t 2 /nobreak >nul
+)
+
+:skip_baseline
+echo.
 echo [6/7] Starting Docker containers...
 docker-compose down >nul 2>&1
 docker-compose up -d
