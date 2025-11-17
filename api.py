@@ -170,6 +170,23 @@ def fetch_devices():
 def get_devices():
     return jsonify(fetch_devices())
 
+# Helper: fetch unique signal labels
+def fetch_signal_labels():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT DISTINCT label, COUNT(*) as count FROM detections GROUP BY label ORDER BY count DESC")
+    labels = [
+        {"label": row[0], "count": row[1]}
+        for row in c.fetchall()
+    ]
+    conn.close()
+    return labels
+
+@app.route('/signal_labels', methods=['GET'])
+def get_signal_labels():
+    """Get list of all unique signal labels in the database with their counts."""
+    return jsonify(fetch_signal_labels())
+
 # Helper: fetch detections with search, sort, filter, pagination
 def fetch_detections(params):
     conn = sqlite3.connect(DB_PATH)
@@ -185,6 +202,12 @@ def fetch_detections(params):
     if 'label' in params:
         query += " AND label = ?"
         args.append(params['label'])
+    # Support multiple labels (comma-separated)
+    if 'labels' in params:
+        labels_list = [l.strip() for l in params['labels'].split(',')]
+        placeholders = ','.join(['?' for _ in labels_list])
+        query += f" AND label IN ({placeholders})"
+        args.extend(labels_list)
     if 'min_freq' in params:
         query += " AND freq >= ?"
         args.append(float(params['min_freq']))
