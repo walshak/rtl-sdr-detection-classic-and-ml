@@ -218,6 +218,12 @@ def fetch_detections(params):
     if 'search' in params:
         query += " AND label LIKE ?"
         args.append(f"%{params['search']}%")
+    
+    # Get total count before pagination
+    count_query = query.replace("SELECT *", "SELECT COUNT(*)")
+    c.execute(count_query, args)
+    total_count = c.fetchone()[0]
+    
     # Sorting
     sort = params.get('sort', 'timestamp')
     order = params.get('order', 'desc')
@@ -263,12 +269,12 @@ def fetch_detections(params):
             det['waterfall_data'] = []
         detections.append(det)
     conn.close()
-    return detections
+    return detections, total_count
 
 @app.route('/detections', methods=['GET'])
 def get_detections():
     params = request.args.to_dict()
-    detections = fetch_detections(params)
+    detections, total = fetch_detections(params)
     # Format for charting: group by chart type
     chart_type = params.get('chart', 'spectrum')
     if chart_type == 'spectrum':
@@ -512,7 +518,8 @@ def get_detections():
         ]
     return jsonify({
         'results': data,
-        'count': len(data)
+        'count': len(data),
+        'total': total
     })
 
 @app.route('/detections/<int:det_id>', methods=['DELETE'])
@@ -590,7 +597,7 @@ def get_chart_data(chart_type):
     }
     
     params['page_size'] = chart_page_sizes.get(chart_type, 50)
-    detections = fetch_detections(params)
+    detections, total = fetch_detections(params)
     
     # Process data based on chart type
     if chart_type in ['time_series', 'frequency_analysis', 'signal_quality', 'advanced_spectral', 'modulation_analysis', 'performance_metrics', 'constellation', 'peaks', 'spectrum', 'waterfall', 'histogram', 'scatter', 'timeline', 'signal_strength', 'frequency_distribution']:
@@ -598,7 +605,7 @@ def get_chart_data(chart_type):
     else:
         # Use existing processing with proper serialization
         params['chart'] = chart_type
-        raw_data = fetch_detections(params)
+        raw_data, total = fetch_detections(params)
         # Convert any bytes objects to serializable format
         data = []
         for item in raw_data:
@@ -614,6 +621,7 @@ def get_chart_data(chart_type):
     return jsonify({
         'results': data,
         'count': len(data),
+        'total': total,
         'chart_type': chart_type
     })
 
