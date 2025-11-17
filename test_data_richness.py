@@ -5,12 +5,20 @@ Test script to show the richness of data now collected by the enhanced listen.py
 
 import sqlite3
 import json
+import os
 
 def test_data_richness():
     """Test what data will be available after running the enhanced listen.py"""
     
+    # Use data folder for database
+    data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
+    db_path = os.path.join(data_dir, 'detections.db')
+    if not os.path.exists(db_path):
+        print(f"Error: Database not found at {db_path}")
+        return
+    
     # Connect to database and check schema
-    conn = sqlite3.connect('detections.db')
+    conn = sqlite3.connect(db_path)
     c = conn.cursor()
     
     print("=== DATABASE SCHEMA ===")

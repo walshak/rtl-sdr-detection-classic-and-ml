@@ -142,10 +142,24 @@ def classify_signal(power_spectrum):
     return pred_label, confidence
 
 def listen_and_flag():
-    sdr = RtlSdr(device_index=1)
+    # Get device index from environment variable with fallback
+    device_index = int(os.getenv('RTL_SDR_DEVICE', '0'))
+    try:
+        sdr = RtlSdr(device_index=device_index)
+        print(f"Using RTL-SDR device at index {device_index}")
+    except:
+        device_index = 1 if device_index == 0 else 0
+        print(f"Trying alternate device index {device_index}...")
+        sdr = RtlSdr(device_index=device_index)
     sdr.sample_rate = SAMPLE_RATE
     sdr.gain = 'auto'
-    conn = sqlite3.connect('detections_ml.db')
+    
+    # Use data folder for database
+    data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
+    if not os.path.exists(data_dir):
+        os.makedirs(data_dir)
+    db_path = os.path.join(data_dir, 'detections_ml.db')
+    conn = sqlite3.connect(db_path)
     
     fft_history = {}
     max_history = 32

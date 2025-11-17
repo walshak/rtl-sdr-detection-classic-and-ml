@@ -1,0 +1,5 @@
+pyrtlsdr
+numpy
+matplotlib
+scipy
+flask

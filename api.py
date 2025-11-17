@@ -3,9 +3,14 @@ from flask import Flask, request, jsonify, render_template
 import sqlite3
 import numpy as np
 import math
+import os
 
 app = Flask(__name__)
-DB_PATH = 'detections.db'
+# Always use data folder for database
+DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
+if not os.path.exists(DATA_DIR):
+    os.makedirs(DATA_DIR)
+DB_PATH = os.getenv('DB_PATH', os.path.join(DATA_DIR, 'detections.db'))
 
 # Chart data processing functions
 def process_chart_data(detections, chart_type):
@@ -595,6 +600,28 @@ def get_chart_data(chart_type):
 @app.route('/')
 def dashboard():
     return render_template('dashboard.html')
+
+# Health check endpoint for Docker
+@app.route('/health')
+def health_check():
+    """Health check endpoint for container monitoring."""
+    try:
+        # Check database connectivity
+        conn = sqlite3.connect(DB_PATH)
+        conn.execute("SELECT 1")
+        conn.close()
+        
+        return jsonify({
+            'status': 'healthy',
+            'database': 'connected',
+            'service': 'rtl-sdr-api'
+        }), 200
+    except Exception as e:
+        return jsonify({
+            'status': 'unhealthy',
+            'error': str(e),
+            'service': 'rtl-sdr-api'
+        }), 503
 
 if __name__ == '__main__':
     app.run(debug=True)

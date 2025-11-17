@@ -2,6 +2,7 @@ import numpy as np
 from rtlsdr import RtlSdr
 import time
 import datetime
+import os
 
 # Frequency bands in Hz
 BANDS = {
@@ -36,7 +37,15 @@ def scan_band(sdr, band_name, freq_start, freq_end, step=2e6):
 
 def main():
     global seen_signals
-    sdr = RtlSdr(device_index=1)  # Specify device index if multiple SDRs are connected
+    # Get device index from environment variable with fallback
+    device_index = int(os.getenv('RTL_SDR_DEVICE', '0'))
+    try:
+        sdr = RtlSdr(device_index=device_index)
+        print(f"Using RTL-SDR device at index {device_index}")
+    except:
+        device_index = 1 if device_index == 0 else 0
+        print(f"Trying alternate device index {device_index}...")
+        sdr = RtlSdr(device_index=device_index)
     sdr.sample_rate = SAMPLE_RATE
     sdr.gain = 'auto'
     print('Starting scan...')

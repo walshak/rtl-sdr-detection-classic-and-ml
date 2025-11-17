@@ -1,0 +1,95 @@
+services:
+  aeroshield-frontend:
+    build: 
+      context: ./AeroShield
+      dockerfile: Dockerfile
+    container_name: aeroshield-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=${AEROSHIELD_DATABASE_URL:-mongodb+srv://aeroshield:aeroshield1234@cluster0.a8ir6ga.mongodb.net/Test?appName=Cluster0}
+      - JWT_SECRET=${AEROSHIELD_JWT_SECRET:-aero-shield-secret-key}
+      - API_BASE_URL=http://rtl-sdr-web:5000
+    restart: unless-stopped
+    networks:
+      - rtl-sdr-network
+    depends_on:
+      - rtl-sdr-web
+
+  rtl-sdr-web:
+    build: .
+    container_name: rtl-sdr-dashboard
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./data:/app/data
+      - ./models:/app/models
+      - ./baseline.json:/app/baseline.json
+      - ./api.py:/app/api.py
+      - ./templates:/app/templates
+    devices:
+      - /dev/bus/usb:/dev/bus/usb  # USB device access
+    privileged: true  # Required for USB access
+    environment:
+      - FLASK_ENV=production
+      - FLASK_APP=api.py
+      - RTL_SDR_DEVICE=0
+    env_file:
+      - .env
+    restart: unless-stopped
+    networks:
+      - rtl-sdr-network
+
+  rtl-sdr-listener:
+    build: .
+    container_name: rtl-sdr-listener
+    command: python listen.py
+    volumes:
+      - ./data:/app/data
+      - ./baseline.json:/app/baseline.json
+      - ./listen.py:/app/listen.py
+      - ./scan.py:/app/scan.py
+      - ./collect_baseline.py:/app/collect_baseline.py
+    devices:
+      - /dev/bus/usb:/dev/bus/usb
+    privileged: true
+    environment:
+      - RTL_SDR_DEVICE=0
+    env_file:
+      - .env
+    restart: unless-stopped
+    depends_on:
+      - rtl-sdr-web
+    networks:
+      - rtl-sdr-network
+
+  rtl-sdr-ml-listener:
+    build: .
+    container_name: rtl-sdr-ml-listener
+    command: python ml_listen.py
+    volumes:
+      - ./data:/app/data
+      - ./models:/app/models
+      - ./baseline.json:/app/baseline.json
+      - ./ml_listen.py:/app/ml_listen.py
+      - ./ml_data_collection.py:/app/ml_data_collection.py
+      - ./ml_training.py:/app/ml_training.py
+    devices:
+      - /dev/bus/usb:/dev/bus/usb
+    privileged: true
+    environment:
+      - RTL_SDR_DEVICE=0
+    env_file:
+      - .env
+    restart: unless-stopped
+    depends_on:
+      - rtl-sdr-web
+    networks:
+      - rtl-sdr-network
+    profiles:
+      - ml  # Only start with --profile ml
+
+networks:
+  rtl-sdr-network:
+    driver: bridge

@@ -9,6 +9,7 @@ import time
 import datetime
 import sqlite3
 import struct
+import os
 
 # Import scipy functions where needed to avoid import issues
 SCIPY_AVAILABLE = False
@@ -350,10 +351,37 @@ def print_comparison_compact(measured, baseline, tolerances):
 
 def listen_and_flag():
     """Main listening function with enhanced console output."""
-    sdr = RtlSdr(device_index=1)  # Specify device index if multiple SDRs are connected
+    # Get device index from environment variable with fallback
+    device_index = int(os.getenv('RTL_SDR_DEVICE', '0'))
+    try:
+        sdr = RtlSdr(device_index=device_index)
+        print(f"✓ Using RTL-SDR device at index {device_index}")
+    except Exception as e:
+        device_index = 1 if device_index == 0 else 0
+        print(f"⚠ Device {device_index} failed, trying alternate index {device_index}...")
+        try:
+            sdr = RtlSdr(device_index=device_index)
+            print(f"✓ Using RTL-SDR device at index {device_index}")
+        except Exception as e2:
+            print(f"✗ Could not open any RTL-SDR device: {e2}")
+            print("Make sure your RTL-SDR is connected and drivers are installed.")
+            raise
+    
     sdr.sample_rate = SAMPLE_RATE
     sdr.gain = 'auto'
-    conn = sqlite3.connect('detections.db')
+    
+    # Use DB_PATH from environment or default to data directory
+    # Check for Docker environment first, then use local data folder
+    if os.path.exists('/app/data'):
+        db_path = os.getenv('DB_PATH', '/app/data/detections.db')
+    else:
+        data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
+        if not os.path.exists(data_dir):
+            os.makedirs(data_dir)
+        db_path = os.getenv('DB_PATH', os.path.join(data_dir, 'detections.db'))
+    
+    conn = sqlite3.connect(db_path)
+    print(f"📁 Database: {db_path}")
     
     # For waterfall: keep a rolling buffer of FFTs per frequency
     fft_history = {}

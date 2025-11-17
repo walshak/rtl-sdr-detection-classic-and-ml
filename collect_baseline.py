@@ -3,6 +3,7 @@ import numpy as np
 from rtlsdr import RtlSdr
 import time
 import datetime
+import os
 
 # Example frequencies and types
 FREQUENCIES = [
@@ -27,7 +28,14 @@ SAMPLES = 256*1024
 
 
 def collect_samples(freq, label):
-    sdr = RtlSdr(device_index=1)  # Specify device index if multiple SDRs are connected
+    # Get device index from environment variable with fallback
+    device_index = int(os.getenv('RTL_SDR_DEVICE', '0'))
+    try:
+        sdr = RtlSdr(device_index=device_index)
+    except:
+        device_index = 1 if device_index == 0 else 0
+        print(f"Trying alternate device index {device_index}...")
+        sdr = RtlSdr(device_index=device_index)
     sdr.sample_rate = SAMPLE_RATE
     sdr.center_freq = freq
     sdr.gain = 'auto'
